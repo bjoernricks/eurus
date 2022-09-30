@@ -23,7 +23,7 @@ from ..errors import AdvisoriesIOError, ProductsIOError
 from ..models import (
     Advisories,
     Advisory,
-    DistributionAdvisories,
+    OperatingSystemAdvisories,
     Package,
     Product,
     Products,
@@ -47,8 +47,69 @@ _DEFAULT_INDENTATION = 4
 logger = logging.getLogger(__name__)
 
 
-def _distribution_file_path(path: Path, distribution: str) -> Path:
-    return path / distribution.lower()
+def _operating_system_file_path(path: Path, distribution: str) -> Path:
+    file = path / distribution.lower()
+    return file.with_suffix(file.suffix + ".notus")
+
+
+class JSONOperatingSystemAdvisories:
+    def __init__(
+        self,
+        *,
+        indent: Optional[int] = _DEFAULT_INDENTATION,
+    ) -> None:
+        self._indent = indent
+
+    def read(self, notus_file: Path) -> OperatingSystemAdvisories:
+        with notus_file.open("r", encoding="utf-8") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError as e:
+                raise AdvisoriesIOError(
+                    f"Could not read '{notus_file.absolute()}'. "
+                    f"Error was {e}"
+                ) from None
+
+        operating_system = notus_file.stem
+
+        version = data.get("version")
+        if not version:
+            raise AdvisoriesIOError("No version information found")
+
+        family = data.get("family")
+        if not family:
+            raise AdvisoriesIOError("No family information found")
+
+        if version != VERSION:
+            raise AdvisoriesIOError(
+                f"Unknown version {version}. "
+                f"Only version {VERSION} is supported."
+            )
+
+        os_advisories = OperatingSystemAdvisories(
+            operating_system=operating_system, family=family
+        )
+        for raw_advisory in data["advisories"]:
+            advisory = Advisory.from_dict(raw_advisory)
+            os_advisories.add_advisory(advisory)
+
+        return os_advisories
+
+    def write(
+        self, advisories: OperatingSystemAdvisories, notus_file: Path
+    ) -> None:
+        data = {
+            "version": VERSION,
+            "family": advisories.family,
+        }
+        data["advisories"] = []
+
+        for advisory in advisories:
+            advisory_data = advisory.to_dict()
+            data["advisories"].append(advisory_data)
+
+        with notus_file.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=self._indent, cls=CustomJSONEncoder)
 
 
 class JSONAdvisories(AdvisoriesIO):
@@ -84,31 +145,18 @@ class JSONAdvisories(AdvisoriesIO):
 
         advisories = Advisories()
 
-        for file_path, data in self._read_files_contents():
-            distribution = file_path.stem
+        os_reader = JSONOperatingSystemAdvisories(indent=self._indent)
 
-            version = data.get("version")
-            if not version:
-                raise AdvisoriesIOError("No version information found")
+        for file_path in self._advisories_directory.iterdir():
+            if (
+                not file_path.is_file()
+                or not file_path.suffix == ".notus"
+                or (self._pattern and not file_path.match(self._pattern))
+            ):
+                continue
 
-            family = data.get("family")
-            if not family:
-                raise AdvisoriesIOError("No family information found")
-
-            if version != VERSION:
-                raise AdvisoriesIOError(
-                    f"Unknown version {version}. "
-                    f"Only version {VERSION} is supported."
-                )
-
-            distribution_advisories = DistributionAdvisories(
-                distribution=distribution, family=family
-            )
-            advisories.add_advisories(distribution_advisories)
-
-            for raw_advisory in data["advisories"]:
-                advisory = Advisory.from_dict(raw_advisory)
-                distribution_advisories.add_advisory(advisory)
+            os_advisories = os_reader.read(file_path)
+            advisories.add_advisories(os_advisories)
 
         return advisories
 
@@ -120,47 +168,13 @@ class JSONAdvisories(AdvisoriesIO):
         """
         self._advisories_directory.mkdir(parents=True, exist_ok=True)
 
-        for distribution_advisories in advisories:
-            data = {
-                "version": VERSION,
-                "family": distribution_advisories.family,
-            }
-            data["advisories"] = []
+        os_writer = JSONOperatingSystemAdvisories(indent=self._indent)
 
-            for advisory in distribution_advisories:
-                advisory_data = advisory.to_dict()
-                data["advisories"].append(advisory_data)
-
-            advisories_file = _distribution_file_path(
-                self._advisories_directory, distribution_advisories.distribution
+        for os_advisories in advisories:
+            notus_file = _operating_system_file_path(
+                self._advisories_directory, os_advisories.operating_system
             )
-
-            with advisories_file.open("w", encoding="utf-8") as f:
-                json.dump(data, f, indent=self._indent, cls=CustomJSONEncoder)
-
-    def _read_files_contents(self) -> Iterator[tuple[Path, dict[str, Any]]]:
-        """Generator for the filename and parsed JSON content of advisories
-        files.
-
-        Yields:
-            The file path and parsed content of the file.
-        """
-        for file_path in self._advisories_directory.iterdir():
-            if (
-                not file_path.is_file()
-                or not file_path.suffix == ".notus"
-                or (self._pattern and not file_path.match(self._pattern))
-            ):
-                continue
-
-            with file_path.open("r", encoding="utf-8") as f:
-                try:
-                    yield file_path, json.load(f)
-                except json.JSONDecodeError as e:
-                    raise AdvisoriesIOError(
-                        f"Could not read '{file_path.absolute()}'. "
-                        f"Error was {e}"
-                    ) from None
+            os_writer.write(os_advisories, notus_file)
 
 
 def _product_file_path(path: Path, product: str) -> Path:

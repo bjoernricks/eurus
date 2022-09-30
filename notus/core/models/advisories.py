@@ -22,11 +22,11 @@ from .advisory import Advisory
 
 
 @dataclass(frozen=True, kw_only=True)
-class DistributionAdvisories:
-    """Maintains a collection of advisories per distribution"""
+class OperatingSystemAdvisories:
+    """Maintains a collection of advisories per operating system"""
 
     family: str
-    distribution: str
+    operating_system: str
 
     _advisories: dict[str, Advisory] = field(default_factory=dict)
 
@@ -49,7 +49,7 @@ class DistributionAdvisories:
         """
         return self._advisories.get(oid)
 
-    def update(self, other: "DistributionAdvisories") -> None:
+    def update(self, other: "OperatingSystemAdvisories") -> None:
         """Updates the advisories with the advisories from other, overwriting
         existing ones.
 
@@ -68,17 +68,19 @@ class DistributionAdvisories:
 
 @dataclass(frozen=True)
 class Advisories:
-    """Maps distributions to advisories"""
+    """Maps operating systems to advisories"""
 
-    _advisories: dict[str, DistributionAdvisories] = field(default_factory=dict)
+    _advisories: dict[str, OperatingSystemAdvisories] = field(
+        default_factory=dict
+    )
 
-    def add_advisories(self, advisories: DistributionAdvisories) -> None:
-        self._advisories[advisories.distribution] = advisories
+    def add_advisories(self, advisories: OperatingSystemAdvisories) -> None:
+        self._advisories[advisories.operating_system] = advisories
 
-    def __getitem__(self, key: str) -> DistributionAdvisories:
+    def __getitem__(self, key: str) -> OperatingSystemAdvisories:
         return self._advisories[key]
 
-    def __iter__(self) -> Iterator[DistributionAdvisories]:
+    def __iter__(self) -> Iterator[OperatingSystemAdvisories]:
         return iter(self._advisories.values())
 
     def __len__(self) -> int:

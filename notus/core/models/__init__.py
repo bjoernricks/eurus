@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-from .advisories import Advisories, DistributionAdvisories
+from .advisories import Advisories, OperatingSystemAdvisories
 from .advisory import Advisory
 from .information import VulnerabilityInformation
 from .packages import FixedPackages, Package
@@ -26,7 +26,7 @@ from .severity import Severity
 __all__ = (
     "Advisories",
     "Advisory",
-    "DistributionAdvisories",
+    "OperatingSystemAdvisories",
     "FixedPackages",
     "Package",
     "Product",
