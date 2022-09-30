@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# Copyright (C) 2014-2022 Greenbone Networks GmbH
+# Copyright (C) 2021-2022 Greenbone Networks GmbH
 #
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
@@ -15,23 +14,3 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
-
-
-class NotusError(Exception):
-    """Base error class for notus exceptions."""
-
-
-class AdvisoriesIOError(NotusError):
-    """Error class for issues during reading or writing advisories
-    information.
-    """
-
-
-class ProductsIOError(NotusError):
-    """Error class for issues during reading or writinga products
-    information.
-    """
-
-
-class MessageParsingError(NotusError):
-    """A problem while parsing an message"""
