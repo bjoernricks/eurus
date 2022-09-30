@@ -8,6 +8,7 @@ license = "AGPL-3.0-or-later"
 [tool.poetry.dependencies]
 python = "^3.9"
 httpx = "^0.23.0"
+sortedcontainers = "^2.4.0"
 
 [tool.poetry.dev-dependencies]
 autohooks = ">=22.8.1"
