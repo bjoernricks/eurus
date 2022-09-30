@@ -214,3 +214,9 @@ class Advisory:
             and self.qod_type == other.qod_type
             and self.severity == other.severity
         )
+
+    def __hash__(self) -> int:
+        # implement hash function for storage in dict, set, etc.
+        # use oid for hashing because it is the unique id of an advisory
+        # different advisories must have a different oid
+        return hash(self.oid)
