@@ -23,7 +23,7 @@ from .sorted_set import FrozenSortedSet
 DEFAULT_SPECIFIER = ">="
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Package:
     """
     A software "package"
@@ -91,7 +91,7 @@ class Package:
         return self.name + self.full_version < other.name + other.full_version
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class FixedPackages:
     """Maps an advisory oid to a list of fixed packages."""
 

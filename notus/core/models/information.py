@@ -17,11 +17,11 @@
 
 from dataclasses import dataclass, field
 
-from .advisories import DistributionAdvisories
+from .advisories import Advisories
 from .products import Products
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class VulnerabilityInformation:
     """Stores information about gathered vulnerability information.
 
@@ -30,7 +30,5 @@ class VulnerabilityInformation:
     packages.
     """
 
-    advisories: DistributionAdvisories = field(
-        default_factory=DistributionAdvisories
-    )
+    advisories: Advisories = field(default_factory=Advisories)
     products: Products = field(default_factory=Products)

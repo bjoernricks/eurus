@@ -65,7 +65,7 @@ def sanitize_xrefs(xrefs: list[str]) -> list[str]:
     ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Advisory:
     oid: str = None
     title: str = None

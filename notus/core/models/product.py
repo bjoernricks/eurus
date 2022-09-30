@@ -48,7 +48,7 @@ class ProductPackages:
         return len(self._fixed_packages)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Product:
     name: str
     package_type: str

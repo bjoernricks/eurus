@@ -21,7 +21,7 @@ from typing import Iterator, Optional
 from .advisory import Advisory
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DistributionAdvisories:
     """Maintains a collection of advisories per distribution"""
 
