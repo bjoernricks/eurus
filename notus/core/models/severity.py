@@ -17,8 +17,10 @@
 
 from dataclasses import dataclass
 
+DEFAULT_CVSS_V2 = "AV:N/AC:L/Au:N/C:P/I:N/A:N"
 
-@dataclass
+
+@dataclass(frozen=True, kw_only=True)
 class Severity:
     origin: str = None
     date: int = None
@@ -71,42 +73,37 @@ class Severity:
             or not self.cvss_v3
         )
 
-    def has_empty_cvssv2_field(self) -> bool:
-        """Checks if cvss_v2 field is empty in this object.
-
-        Returns:
-            True if cvss_v2 field is empty. Else False.
-        """
-        return not self.cvss_v2
-
     @staticmethod
     def get_defaults() -> tuple[str, int, str, str]:
         """Gets the severity defaults.
 
         Returns:
-            Tuple of (origin, time, cvss_v2, cvss_v3).
+            Tuple of (origin, time, cvss_v2).
         """
         return (
             "Greenbone",
             None,
-            "AV:N/AC:L/Au:N/C:P/I:N/A:N",
+            DEFAULT_CVSS_V2,
+            None,
         )
 
-    def has_default_cvssv2(self) -> bool:
+    def has_default_cvss_v2(self) -> bool:
         """Checks if the advisories CVSSv2 information equals
         the default value.
 
         Returns:
             True if equal, otherwise False.
         """
-        return self.cvss_v2 == self.get_defaults()[2]
+        return self.cvss_v2 == DEFAULT_CVSS_V2
 
-    def set_defaults(self) -> None:
-        """Sets the severity defaults."""
+    @classmethod
+    def from_defaults(cls) -> "Severity":
+        """Create a new Severity instance from defaults."""
 
-        self.cvss_v3 = None
         (
-            self.origin,
-            self.date,
-            self.cvss_v2,
-        ) = self.get_defaults()
+            origin,
+            date,
+            cvss_v2,
+            cvss_v3,
+        ) = cls.get_defaults()
+        return cls(cvss_v3=cvss_v3, cvss_v2=cvss_v2, date=date, origin=origin)
