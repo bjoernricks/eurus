@@ -17,15 +17,53 @@
 
 import asyncio
 import sys
+from contextlib import AsyncExitStack
 from pathlib import Path
+from typing import AsyncGenerator
+from uuid import uuid4
+
+import paho.mqtt.client as mqtt
+from asyncio_mqtt import Client, ProtocolVersion
 
 from eurus.analyzer.dpkg import Dpkg
-from eurus.analyzer.release import OSRelease
+from eurus.analyzer.release import OSRelease, OSReleaseInfo
 from eurus.docker import Docker, DockerArchive
+from notus.core.messages.result import ResultMessage
+from notus.core.messages.start import ScanStartMessage
+from notus.core.messages.status import ScanStatus, ScanStatusMessage
+
+
+def get_notus_operating_system(os_release: OSReleaseInfo) -> str:
+    return f"{os_release.id} {os_release.version_id}"
 
 
 def main() -> None:
     asyncio.run(run())
+
+
+async def handle_result_messages(
+    messages: AsyncGenerator[mqtt.MQTTMessage, None]
+):
+    async for message in messages:
+        result_message = ResultMessage.load(message.payload)
+        print(
+            f"Result for Scan with ID '{result_message.scan_id}' Type "
+            f"'{result_message.result_type}' OID '{result_message.oid}' "
+            f"value '{result_message.value}'"
+        )
+
+
+async def handle_scan_status_messages(
+    messages: AsyncGenerator[mqtt.MQTTMessage, None]
+):
+    async for message in messages:
+        scan_status_message = ScanStatusMessage.load(message.payload)
+        print(
+            f"Status of Scan with ID '{scan_status_message.scan_id}' changed "
+            f"to '{scan_status_message.status}'"
+        )
+        if scan_status_message.status == ScanStatus.FINISHED:
+            raise ValueError("Scan Finished")
 
 
 async def run() -> None:
@@ -66,18 +104,61 @@ async def run() -> None:
 
             entry = OSRelease.detect(docker_archive)
             if entry:
-                print(OSRelease.release(entry.extract()))
+                os_release = OSRelease.release(entry.extract())
+                print(f"Found {os_release}")
             else:
                 print("No OS Release detected")
+                return
 
             entry = Dpkg.detect(docker_archive)
             if entry:
                 packages = Dpkg.get(entry.extract())
                 print(f"Is deb based. {len(packages)} packages installed.")
-                for package in packages:
-                    print(package)
             else:
                 print("It is not deb based")
+                return
+
+            scan_id = str(uuid4())
+            message = ScanStartMessage(
+                scan_id=scan_id,
+                host_ip="",
+                host_name="",
+                os_release=get_notus_operating_system(os_release),
+                package_list=[str(package) for package in packages],
+            )
+            async with AsyncExitStack() as stack:
+                client = Client(
+                    "localhost",
+                    client_id="eurus.client",
+                    protocol=ProtocolVersion.V5,
+                )
+                await stack.enter_async_context(client)
+                await client.subscribe(ResultMessage.topic)
+                await client.subscribe(ScanStatusMessage.topic)
+
+                print(f"Starting scan with ID '{scan_id}'")
+
+                await client.publish(message.topic, message.dump(), qos=1)
+                manager = client.filtered_messages(
+                    ResultMessage.topic, queue_maxsize=1
+                )
+                messages = await stack.enter_async_context(manager)
+                result_task = asyncio.create_task(
+                    handle_result_messages(messages)
+                )
+
+                manager = client.filtered_messages(
+                    ScanStatusMessage.topic, queue_maxsize=1
+                )
+                messages = await stack.enter_async_context(manager)
+                scan_status_task = asyncio.create_task(
+                    handle_scan_status_messages(messages)
+                )
+
+                try:
+                    await asyncio.gather(scan_status_task, result_task)
+                except ValueError:
+                    return
 
     return
 
