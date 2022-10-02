@@ -18,7 +18,7 @@
 
 from dataclasses import dataclass
 from io import BufferedReader
-from typing import IO, Optional
+from typing import Optional
 
 from eurus.docker import DockerArchive, DockerImageEntry
 
