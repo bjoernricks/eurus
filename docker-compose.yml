@@ -1,0 +1,38 @@
+services:
+  notus-data:
+    image: greenbone/notus-data
+    volumes:
+      - notus_data_vol:/mnt
+
+  gpg-data:
+    image: greenbone/gpg-data
+    volumes:
+      - gpg_data_vol:/mnt
+
+  mqtt-broker:
+    restart: on-failure
+    image: greenbone/mqtt-broker
+    ports:
+      - 1883:1883
+    networks:
+      default:
+        aliases:
+          - mqtt-broker
+          - broker
+
+  notus-scanner:
+    restart: on-failure
+    image: greenbone/notus-scanner:stable
+    volumes:
+      - notus_data_vol:/var/lib/notus
+      - gpg_data_vol:/etc/openvas/gnupg
+    environment:
+      NOTUS_SCANNER_MQTT_BROKER_ADDRESS: mqtt-broker
+      NOTUS_SCANNER_PRODUCTS_DIRECTORY: /var/lib/notus/products
+    depends_on:
+      - mqtt-broker
+      - gpg-data
+
+volumes:
+  gpg_data_vol:
+  notus_data_vol:
