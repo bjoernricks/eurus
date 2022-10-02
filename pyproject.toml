@@ -9,6 +9,7 @@ license = "AGPL-3.0-or-later"
 python = "^3.9"
 httpx = "^0.23.0"
 sortedcontainers = "^2.4.0"
+asyncio-mqtt = "^0.12.1"
 
 [tool.poetry.dev-dependencies]
 autohooks = ">=22.8.1"
