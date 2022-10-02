@@ -39,7 +39,7 @@ class ScanStatus(Enum):
 
 @dataclass(frozen=True, kw_only=True)
 class ScanStatusMessage(Message):
-    message_type = MessageType.SCAN_STATUS
+    message_type: MessageType = MessageType.SCAN_STATUS
     topic: str = "scanner/status"
 
     scan_id: str
