@@ -32,6 +32,9 @@ class DEBPackage:
     version: str
     architecture: str
 
+    def __str__(self) -> str:
+        return f"{self.name}-{self.version}"
+
 
 class Dpkg:
     @staticmethod
