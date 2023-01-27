@@ -17,13 +17,13 @@
 
 
 from dataclasses import dataclass
-from io import BufferedReader
 from typing import Optional
 
-from eurus.docker import DockerArchive, DockerImageEntry
+from eurus.analyzer.detector import Detector
+from eurus.filesystem import File, FileSystem
 
-ETC_OS_RELEASE = "etc/os-release"
-USR_LIB_OS_RELEASE = "usr/lib/os-release"
+ETC_OS_RELEASE = "/etc/os-release"
+USR_LIB_OS_RELEASE = "/usr/lib/os-release"
 
 
 @dataclass
@@ -47,18 +47,24 @@ def cleanup(item: str) -> str:
     return item
 
 
-class OSRelease:
+class OSRelease(Detector):
     @staticmethod
-    def detect(archive: DockerArchive) -> Optional[DockerImageEntry]:
-        os_release_entry = archive.entries.get(ETC_OS_RELEASE)
+    def detect(file_system: FileSystem) -> Optional[File]:
+        """
+        Returns a File if the file system contains OS Release Information
+        """
+        os_release_entry = file_system.get(ETC_OS_RELEASE)
         if os_release_entry:
             return os_release_entry
 
-        os_release_entry = archive.entries.get(USR_LIB_OS_RELEASE)
+        os_release_entry = file_system.get(USR_LIB_OS_RELEASE)
         return os_release_entry
 
     @staticmethod
-    def release(file: BufferedReader) -> OSReleaseInfo:
+    def release(file: File) -> OSReleaseInfo:
+        """
+        Reads the OS Release Information from a File
+        """
         name = None
         version_id = None
         pretty_name = None

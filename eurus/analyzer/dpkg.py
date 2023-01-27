@@ -18,12 +18,12 @@
 
 from dataclasses import dataclass
 from email.feedparser import BytesFeedParser
-from io import BufferedReader
 from typing import Iterable, Optional
 
-from eurus.docker import DockerArchive, DockerImageEntry
+from eurus.analyzer.detector import Detector
+from eurus.filesystem import File, FileSystem
 
-DPKG_STATUS_FILE = "var/lib/dpkg/status"
+DPKG_STATUS_FILE = "/var/lib/dpkg/status"
 
 
 @dataclass
@@ -36,13 +36,13 @@ class DEBPackage:
         return f"{self.name}-{self.version}"
 
 
-class Dpkg:
+class Dpkg(Detector):
     @staticmethod
-    def detect(archive: DockerArchive) -> Optional[DockerImageEntry]:
-        return archive.entries.get(DPKG_STATUS_FILE)
+    def detect(file_system: FileSystem) -> Optional[File]:
+        return file_system.get(DPKG_STATUS_FILE)
 
     @staticmethod
-    def get(file: BufferedReader) -> Iterable[DEBPackage]:
+    def get(file: File) -> Iterable[DEBPackage]:
         # the dpkg package database uses the email format defined in RFC2822
         parser = BytesFeedParser()
         packages = []

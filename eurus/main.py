@@ -17,150 +17,117 @@
 
 import asyncio
 import sys
-from contextlib import AsyncExitStack
-from pathlib import Path
-from typing import AsyncGenerator
-from uuid import uuid4
+import tempfile
+from io import FileIO
+from typing import Optional
 
-import paho.mqtt.client as mqtt
-from asyncio_mqtt import Client, ProtocolVersion
+from httpx import HTTPStatusError
+from rich.console import Console
+from rich.progress import Progress
+from rich.table import Table
 
 from eurus.analyzer.dpkg import Dpkg
-from eurus.analyzer.release import OSRelease, OSReleaseInfo
-from eurus.docker import Docker, DockerArchive
-from notus.core.messages.result import ResultMessage
-from notus.core.messages.start import ScanStartMessage
-from notus.core.messages.status import ScanStatus, ScanStatusMessage
+from eurus.analyzer.release import OSRelease
+from eurus.filesystem.docker import Docker, DockerArchive
+from eurus.mqtt import MQTT
 
 
-def get_notus_operating_system(os_release: OSReleaseInfo) -> str:
-    return f"{os_release.id} {os_release.version_id}"
+async def download_docker_archive(
+    client: Docker, image_name: str, file: FileIO
+) -> Optional[DockerArchive]:
+    try:
+        await client.images.inspect(image_name)
+    except HTTPStatusError:
+        try:
+            await client.images.pull(image_name)
+        except HTTPStatusError as e:
+            print(e.response.json())
+            raise
 
-
-def main() -> None:
-    asyncio.run(run())
-
-
-async def handle_result_messages(
-    messages: AsyncGenerator[mqtt.MQTTMessage, None]
-):
-    async for message in messages:
-        result_message = ResultMessage.load(message.payload)
-        print(
-            f"Result for Scan with ID '{result_message.scan_id}' Type "
-            f"'{result_message.result_type}' OID '{result_message.oid}' "
-            f"value '{result_message.value}'"
+    with Progress() as progress:
+        task_id = progress.add_task(
+            f"Downloading image '{image_name}'", total=None
         )
 
+        async for data in client.images.get(image_name):
+            file.write(data)
+            progress.advance(task_id)
 
-async def handle_scan_status_messages(
-    messages: AsyncGenerator[mqtt.MQTTMessage, None]
-):
-    async for message in messages:
-        scan_status_message = ScanStatusMessage.load(message.payload)
-        print(
-            f"Status of Scan with ID '{scan_status_message.scan_id}' changed "
-            f"to '{scan_status_message.status}'"
-        )
-        if scan_status_message.status == ScanStatus.FINISHED:
-            raise ValueError("Scan Finished")
+        file.flush()
+
+        progress.update(task_id, total=1, completed=1)
+
+        return DockerArchive(file.name)
 
 
-async def run() -> None:
-    image_name = (
-        sys.argv[1] if len(sys.argv) > 1 else "greenbone/gvm-tools:latest"
-    )
-    destination = sys.argv[2] if len(sys.argv) > 2 else "/tmp/image.tar.gz"
+async def run(console: Console, error_console: Console) -> None:
+    image_name = sys.argv[1] if len(sys.argv) > 1 else "ubuntu:latest"
 
     async with Docker() as client:
-        # response = await client.images.list()
+        with tempfile.NamedTemporaryFile() as f:
+            console.print(
+                "[green bold]Scanning Container Image "
+                f"'{image_name}'[/green bold]\n"
+            )
+            docker_archive = await download_docker_archive(
+                client, image_name, f
+            )
 
-        # for image in response:
-        #     print(image["Id"], image["RepoTags"])
-
-        # async with aiofiles.tempfile.NamedTemporaryFile("wb") as f:
-        with Path(destination).open("wb") as f:
-            print(f"Downloading {image_name} to {destination}")
-
-            async for data in client.images.get(image_name):
-                f.write(data)
-
-            f.flush()
-
-            docker_archive = DockerArchive(f.name)
-
-            print(docker_archive.tags)
-
-            for layer in docker_archive.layers:
-                print(str(layer))
-
-            # for entry in docker_archive.entries:
-            #     print(entry)
-
-            # status_file_entry = docker_archive.entries.get(DPKG_STATUS_FILE)
-            # status_file = status_file_entry.extract()
-            # for line in status_file.readlines():
-            #     print(line.decode("utf8", errors="replace"), end="")
-
-            entry = OSRelease.detect(docker_archive)
-            if entry:
-                os_release = OSRelease.release(entry.extract())
-                print(f"Found {os_release}")
+            os_release_file = OSRelease.detect(docker_archive)
+            if os_release_file:
+                os_release = OSRelease.release(os_release_file)
+                console.print(
+                    f"Detected Operating System '{os_release.name} "
+                    f"{os_release.version_id}' for image '{image_name}'."
+                )
             else:
-                print("No OS Release detected")
+                error_console.print(
+                    f"Not possible to scan image '{image_name}'. "
+                    "No OS release detected."
+                )
                 return
 
             entry = Dpkg.detect(docker_archive)
             if entry:
-                packages = Dpkg.get(entry.extract())
-                print(f"Is deb based. {len(packages)} packages installed.")
+                packages = Dpkg.get(entry)
+                console.print(
+                    f"Image '{image_name}' is deb based. {len(packages)} "
+                    "packages installed."
+                )
             else:
-                print("It is not deb based")
+                error_console.print(
+                    f"Could not detect installed packages for {image_name}."
+                )
                 return
 
-            scan_id = str(uuid4())
-            message = ScanStartMessage(
-                scan_id=scan_id,
-                host_ip="",
-                host_name="",
-                os_release=get_notus_operating_system(os_release),
-                package_list=[str(package) for package in packages],
+        async with MQTT() as client:
+            scan_id = await client.start_scan(
+                os_release,
+                [str(package) for package in packages],
             )
-            async with AsyncExitStack() as stack:
-                client = Client(
-                    "localhost",
-                    client_id="eurus.client",
-                    protocol=ProtocolVersion.V5,
-                )
-                await stack.enter_async_context(client)
-                await client.subscribe(ResultMessage.topic)
-                await client.subscribe(ScanStatusMessage.topic)
 
-                print(f"Starting scan with ID '{scan_id}'")
+            table = Table(
+                title=f"Scan Results for image '{image_name}'",
+                show_lines=True,
+                expand=True,
+            )
+            table.add_column("OID")
+            table.add_column("Result")
 
-                await client.publish(message.topic, message.dump(), qos=1)
-                manager = client.filtered_messages(
-                    ResultMessage.topic, queue_maxsize=1
-                )
-                messages = await stack.enter_async_context(manager)
-                result_task = asyncio.create_task(
-                    handle_result_messages(messages)
-                )
+            async for message in client.results(scan_id):
+                table.add_row(message.oid, message.value.strip())
 
-                manager = client.filtered_messages(
-                    ScanStatusMessage.topic, queue_maxsize=1
-                )
-                messages = await stack.enter_async_context(manager)
-                scan_status_task = asyncio.create_task(
-                    handle_scan_status_messages(messages)
-                )
+            console.print(table)
 
-                try:
-                    await asyncio.gather(scan_status_task, result_task)
-                except ValueError:
-                    return
 
-    return
+def main() -> None:
+    console = Console()
+    error_console = Console(file=sys.stderr)
+
+    try:
+        asyncio.run(run(console, error_console))
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

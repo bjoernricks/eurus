@@ -24,13 +24,31 @@ from io import BufferedReader
 from pathlib import Path
 from tarfile import TarFile, TarInfo
 from types import MappingProxyType, TracebackType
-from typing import Any, AsyncIterator, Dict, Iterable, Iterator, Optional, Union
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterable,
+    Iterator,
+    Optional,
+    Sequence,
+    Union,
+)
 
 import httpx
+
+from eurus.filesystem import File, FileSystem
 
 DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock"
 
 logger = logging.getLogger(__name__)
+
+
+def repo_split(name: str) -> tuple[str, str]:
+    image = name.rsplit(":", maxsplit=1)
+    if isinstance(image, list):
+        return image
+    return image, "latest"
 
 
 class DockerImageEntry:
@@ -90,7 +108,7 @@ class DockerImageLayer:
         return f"<{self.__class__.__name__} {self._id!r} at {id(self):#x}>"
 
 
-class DockerArchive:
+class DockerArchive(FileSystem):
     """
     Class for the docker archive format v1.2
 
@@ -181,6 +199,17 @@ class DockerArchive:
     def tags(self) -> Iterable[str]:
         return self._manifest.get("RepoTags", [])
 
+    def get(self, name: str) -> File:
+        if name.startswith("/"):
+            # remove root slash
+            name = name[1:]
+
+        entry = self.entries.get(name)
+        if not entry:
+            return None
+
+        return entry.extract()
+
 
 class DockerImages:
     def __init__(self, client: httpx.AsyncClient) -> None:
@@ -188,29 +217,42 @@ class DockerImages:
 
     async def list(self) -> Iterable[Dict]:
         response = await self._client.get("http://docker.com/images/json")
+        response.raise_for_status()
         return response.json()
 
     async def inspect(self, name: str) -> Dict:
         response = await self._client.get(
             f"http://docker.com/images/{name}/json"
         )
+        response.raise_for_status()
         return response.json()
 
     async def get(self, name: str) -> AsyncIterator[bytes]:
         async with self._client.stream(
             "GET", f"http://docker.com/images/{name}/get"
         ) as response:
+            response.raise_for_status()
             async for chunk in response.aiter_bytes():
                 yield chunk
+
+    async def pull(self, name: str):
+        image, tag = repo_split(name)
+
+        data = {"tag": tag, "fromImage": image}
+        response = await self._client.post(
+            "http://docker.com/images/create", params=data
+        )
+        response.raise_for_status()
 
 
 class Docker(AbstractAsyncContextManager):
     def __init__(self):
         transport = httpx.AsyncHTTPTransport(uds=DEFAULT_DOCKER_SOCKET)
         timeout = httpx.Timeout(30.0, connect=60.0)
-        client = httpx.AsyncClient(transport=transport, timeout=timeout)
-        self._client = client
-        self.images = DockerImages(client)
+        self._client = httpx.AsyncClient(
+            transport=transport, timeout=timeout, http2=True
+        )
+        self.images = DockerImages(self._client)
 
     async def __aenter__(self) -> "Docker":
         return self
