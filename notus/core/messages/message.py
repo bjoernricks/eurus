@@ -19,7 +19,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Union
+from typing import Any, Self, Union
 from uuid import UUID, uuid4
 
 from ..errors import MessageParsingError
@@ -31,11 +31,11 @@ class MessageType(Enum):
     SCAN_START = "scan.start"
 
 
-MessageBaseType = Union[str, int, float]
+MessageBaseType = Union[str, int, float, None]
 MessageObjectType = dict[str, MessageBaseType]
 MessageListType = list[Union[MessageBaseType, MessageObjectType]]
 MessageSerializedType = dict[
-    str, Union[str, int, float, MessageListType, MessageObjectType]
+    str, Union[str, int, float, None, MessageListType, MessageObjectType]
 ]
 MessageParsedType = dict[str, Any]
 
@@ -64,7 +64,7 @@ class Message:
             )
 
         try:
-            message_id = UUID(data.get("message_id"))
+            message_id = UUID(data.get("message_id"))  # type: ignore
         except (TypeError, ValueError) as e:
             raise MessageParsingError(
                 f"error while parsing 'message_id', {e}"
@@ -73,7 +73,7 @@ class Message:
         group_id = data.get("group_id")
         try:
             created = datetime.fromtimestamp(
-                float(data.get("created")), timezone.utc
+                float(data.get("created")), timezone.utc  # type: ignore
             )
         except (TypeError, ValueError) as e:
             raise MessageParsingError(
@@ -97,12 +97,12 @@ class Message:
         }
 
     @classmethod
-    def deserialize(cls, data: MessageSerializedType) -> "Message":
+    def deserialize(cls, data: MessageSerializedType) -> Self:
         kwargs = cls._parse(data)
         return cls(**kwargs)
 
     @classmethod
-    def load(cls, payload: Union[str, bytes]) -> "Message":
+    def load(cls, payload: Union[str, bytes]) -> Self:
         data = json.loads(payload)
         return cls.deserialize(data)
 

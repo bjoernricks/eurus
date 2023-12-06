@@ -42,7 +42,7 @@ class ResultMessage(Message):
     oid: str
     value: str
     port: str = "package"
-    uri: str = None
+    uri: str | None = None
     result_type: ResultType = ResultType.ALARM
 
     def serialize(self) -> MessageSerializedType:
