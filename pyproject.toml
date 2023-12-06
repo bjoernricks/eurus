@@ -1,9 +1,21 @@
 [tool.poetry]
 name = "eurus"
 version = "0.1.0"
-description = ""
+description = "A vulnerability scanner for container images"
 authors = ["Björn Ricks <bjoern.ricks@greenbone.net>"]
 license = "AGPL-3.0-or-later"
+repository = "https://github.com/bjoernricks/eurus/"
+
+classifiers = [
+  # Full list: https://pypi.org/pypi?%3Aaction=list_classifiers
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: GNU General Affero Public License v3 or later (AGPLv3+)",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: OS Independent",
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -28,7 +40,7 @@ eurus-scan = "eurus.main:main"
 
 [tool.black]
 line-length = 80
-target-version = ["py310", "py311"]
+target-version = ["py311"]
 exclude = '''
 /(
     \.git
@@ -56,7 +68,7 @@ pre-commit = [
 
 [tool.ruff]
 line-length = 80
-target-version = "py39"
+target-version = "py311"
 extend-select = ["I", "PLE", "PLW"]
 
 [tool.mypy]
