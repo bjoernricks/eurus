@@ -51,6 +51,9 @@ def repo_split(name: str) -> tuple[str, str]:
     return image[0], "latest"
 
 
+PathLike = os.PathLike | str
+
+
 class DockerImageEntry:
     def __init__(self, layer: "DockerImageLayer", tarinfo: TarInfo):
         self._layer = layer
@@ -115,7 +118,7 @@ class DockerArchive(FileSystem):
     https://github.com/moby/moby/blob/master/image/spec/v1.2.md
     """
 
-    def __init__(self, path: os.PathLike):
+    def __init__(self, path: PathLike):
         self._tarball = TarFile(path)
         self._initialized = False
         self._config = None
