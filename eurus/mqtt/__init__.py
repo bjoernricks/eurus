@@ -18,11 +18,11 @@
 import asyncio
 from asyncio import Event, Queue
 from types import TracebackType
-from typing import AsyncContextManager, AsyncGenerator
+from typing import AsyncContextManager, AsyncIterator
 from uuid import uuid4
 
-import paho.mqtt.client as mqtt
-from asyncio_mqtt import Client, ProtocolVersion
+from aiomqtt import Client, ProtocolVersion
+from aiomqtt import Message as MQTTMessage
 
 from eurus.analyzer.release import OSReleaseInfo
 from notus.core.messages.result import ResultMessage
@@ -45,15 +45,11 @@ class MQTT(AsyncContextManager):
             client_id="eurus.client",
             protocol=ProtocolVersion.V5,
         )
-        self._queues: dict[str, tuple[Queue, Event]] = {}
+        self._queues: dict[str, tuple[Queue[ResultMessage], Event]] = {}
 
     async def __aenter__(self) -> "MQTT":
         await self._client.__aenter__()
-        await asyncio.gather(
-            self._client.subscribe(ResultMessage.topic),
-            self._client.subscribe(ScanStatusMessage.topic),
-        )
-        self._start()
+        self._message_task = asyncio.create_task(self._start())
         return self
 
     async def __aexit__(
@@ -66,47 +62,40 @@ class MQTT(AsyncContextManager):
             await event.wait()
             await queue.join()
 
-        if not self._scan_status_task.done():
-            self._scan_status_task.cancel()
-        if not self._result_task.done():
-            self._result_task.cancel()
+        if not self._message_task.done():
+            self._message_task.cancel()
 
-        await asyncio.gather(
-            self._scan_status_task, self._result_task, return_exceptions=True
-        )
+        try:
+            await self._message_task
+        except asyncio.CancelledError:
+            pass
+
         await self._client.__aexit__(__exc_type, __exc_value, __traceback)
 
-    def _start(self) -> None:
-        self._result_task = asyncio.create_task(self._handle_result_messages())
-        self._scan_status_task = asyncio.create_task(
-            self._handle_scan_status_messages()
+    async def _start(self) -> None:
+        async with self._client.messages() as messages:
+            await self._client.subscribe(ResultMessage.topic)
+            await self._client.subscribe(ScanStatusMessage.topic)
+
+            async for message in messages:
+                if message.topic.matches(ResultMessage.topic):
+                    self._handle_result_message(message)
+                if message.topic.matches(ScanStatusMessage.topic):
+                    self._handle_scan_status_messages(message)
+
+    def _handle_result_message(self, message: MQTTMessage) -> None:
+        result_message: ResultMessage = ResultMessage.load(message.payload)  # type: ignore
+        queue, _ = self._queues[result_message.scan_id]
+        if queue:
+            queue.put_nowait(result_message)
+
+    def _handle_scan_status_messages(self, message: MQTTMessage) -> None:
+        scan_status_message: ScanStatusMessage = ScanStatusMessage.load(
+            message.payload  # type: ignore
         )
-
-    async def _handle_result_messages(self) -> None:
-        async with self._client.filtered_messages(
-            ResultMessage.topic
-        ) as messages:
-            async for message in messages:
-                result_message: ResultMessage = ResultMessage.load(
-                    message.payload
-                )
-                queue, _ = self._queues.get(result_message.scan_id)
-                if queue:
-                    queue.put_nowait(result_message)
-
-    async def _handle_scan_status_messages(self) -> None:
-        async with self._client.filtered_messages(
-            ScanStatusMessage.topic
-        ) as messages:
-            async for message in messages:
-                scan_status_message: ScanStatusMessage = ScanStatusMessage.load(
-                    message.payload
-                )
-                _, event = self._queues.get(
-                    scan_status_message.scan_id, (None, None)
-                )
-                if event and scan_status_message.status == ScanStatus.FINISHED:
-                    event.set()
+        _, event = self._queues.get(scan_status_message.scan_id, (None, None))
+        if event and scan_status_message.status == ScanStatus.FINISHED:
+            event.set()
 
     async def start_scan(
         self,
@@ -128,17 +117,16 @@ class MQTT(AsyncContextManager):
 
         return scan_id
 
-    async def results(
-        self, scan_id: str
-    ) -> AsyncGenerator[ResultMessage, None]:
+    async def results(self, scan_id: str) -> AsyncIterator[ResultMessage]:
         queue, event = self._queues.get(scan_id, (None, None))
-        if not queue:
+        if not queue or not event:
             return
 
         while not event.is_set() or not queue.empty():
             queue_get = asyncio.create_task(queue.get())
+            event_wait = asyncio.create_task(event.wait())
             done, _ = await asyncio.wait(
-                (queue_get, event.wait()), return_when=asyncio.FIRST_COMPLETED
+                (queue_get, event_wait), return_when=asyncio.FIRST_COMPLETED
             )
             if queue_get in done:
                 message = await queue_get
