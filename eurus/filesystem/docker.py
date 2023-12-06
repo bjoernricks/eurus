@@ -46,9 +46,9 @@ logger = logging.getLogger(__name__)
 
 def repo_split(name: str) -> tuple[str, str]:
     image = name.rsplit(":", maxsplit=1)
-    if isinstance(image, list):
-        return image
-    return image, "latest"
+    if len(image) > 1:
+        return (image[0], image[1])
+    return image[0], "latest"
 
 
 class DockerImageEntry:
