@@ -19,7 +19,6 @@ import asyncio
 import sys
 import tempfile
 from io import FileIO
-from typing import Optional
 
 from httpx import HTTPStatusError
 from rich.console import Console
@@ -34,7 +33,7 @@ from eurus.mqtt import MQTT
 
 async def download_docker_archive(
     client: Docker, image_name: str, file: FileIO
-) -> Optional[DockerArchive]:
+) -> DockerArchive:
     try:
         await client.images.inspect(image_name)
     except HTTPStatusError:
@@ -57,7 +56,7 @@ async def download_docker_archive(
 
         progress.update(task_id, total=1, completed=1)
 
-        return DockerArchive(file.name)
+        return DockerArchive(file.name)  # type: ignore
 
 
 async def run(console: Console, error_console: Console) -> None:
@@ -70,7 +69,7 @@ async def run(console: Console, error_console: Console) -> None:
                 f"'{image_name}'[/green bold]\n"
             )
             docker_archive = await download_docker_archive(
-                client, image_name, f
+                client, image_name, f  # type: ignore
             )
 
             os_release_file = OSRelease.detect(docker_archive)
