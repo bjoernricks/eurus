@@ -19,7 +19,13 @@ from abc import ABC, abstractmethod
 from io import BufferedReader
 from typing import Optional
 
+from eurus.errors import EurusError
+
 File = BufferedReader
+
+
+class FileError(EurusError):
+    pass
 
 
 class FileSystem(ABC):
