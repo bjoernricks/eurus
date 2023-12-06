@@ -37,7 +37,7 @@ from typing import (
 
 import httpx
 
-from eurus.filesystem import File, FileSystem
+from eurus.filesystem import File, FileError, FileSystem
 
 DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock"
 
@@ -138,6 +138,11 @@ class DockerArchive(FileSystem):
         manifests: Sequence[dict[str, str]] | None = self._extract_json(  # type: ignore
             "manifest.json"
         )
+        if not manifests:
+            raise FileError(
+                "Container image does not contain a manifest.json file."
+            )
+
         # get first manifest not sure why there are more then one
         self._manifest = manifests[0]
 
