@@ -6,11 +6,11 @@ authors = ["Björn Ricks <bjoern.ricks@greenbone.net>"]
 license = "AGPL-3.0-or-later"
 
 [tool.poetry.dependencies]
-python = "^3.10"
-httpx = {extras = ["http2"], version = "^0.23.1"}
-sortedcontainers = "^2.4.0"
-asyncio-mqtt = "^0.12.1"
-rich = "^13.0.0"
+python = "^3.11"
+httpx = { extras = ["http2"], version = ">=0.23.1" }
+sortedcontainers = ">=2.4.0"
+rich = ">=13.0.0"
+aiomqtt = ">=1.2.1"
 
 [tool.poetry.dev-dependencies]
 autohooks = ">=22.8.1"
