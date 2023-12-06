@@ -20,7 +20,6 @@ import logging
 import os
 from collections import OrderedDict
 from contextlib import AbstractAsyncContextManager
-from io import BufferedReader
 from pathlib import Path
 from tarfile import TarFile, TarInfo
 from types import MappingProxyType, TracebackType
@@ -30,6 +29,7 @@ from typing import (
     Dict,
     Iterable,
     Iterator,
+    Mapping,
     Optional,
     Sequence,
     Union,
@@ -78,7 +78,7 @@ class DockerImageEntry:
     def is_whiteout(self) -> bool:
         return self.path.name.startswith(".wh.")
 
-    def extract(self) -> BufferedReader:
+    def extract(self) -> File:
         return self._layer.extract(self)
 
     def __fspath__(self) -> str:
@@ -93,9 +93,9 @@ class DockerImageLayer:
         self._tarball = tarball
         self._id = layer_id
 
-    def extract(self, entry: DockerImageEntry) -> BufferedReader:
+    def extract(self, entry: DockerImageEntry) -> File:
         # pylint: disable=protected-access
-        return self._tarball.extractfile(entry._tarinfo)
+        return self._tarball.extractfile(entry._tarinfo)  # type: ignore
 
     def __iter__(self) -> Iterator[DockerImageEntry]:
         for tarinfo in self._tarball:
@@ -124,19 +124,20 @@ class DockerArchive(FileSystem):
 
         self._init()
 
-    def _extract_file(
-        self, file: Union[TarInfo, str]
-    ) -> Optional[BufferedReader]:
-        return self._tarball.extractfile(file)
+    def _extract_file(self, file: Union[TarInfo, str]) -> File | None:
+        return self._tarball.extractfile(file)  # type: ignore
 
-    def _extract_json(self, file: Union[TarInfo, str]) -> Dict[str, Any]:
-        return json.load(self._tarball.extractfile(file))
+    def _extract_json(self, file: Union[TarInfo, str]) -> Dict[str, Any] | None:
+        tar_file = self._extract_file(file)
+        return json.load(tar_file) if tar_file else None
 
     def _init(self):
         if self._initialized:
             return
 
-        manifests = self._extract_json("manifest.json")
+        manifests: Sequence[dict[str, str]] | None = self._extract_json(  # type: ignore
+            "manifest.json"
+        )
         # get first manifest not sure why there are more then one
         self._manifest = manifests[0]
 
@@ -180,26 +181,26 @@ class DockerArchive(FileSystem):
         self._initialized = True
 
     @property
-    def entries(self) -> Dict[str, DockerImageEntry]:
+    def entries(self) -> Mapping[str, DockerImageEntry]:
         return MappingProxyType(self._entries)
 
     @property
-    def layers(self) -> Dict[str, DockerImageLayer]:
+    def layers(self) -> Mapping[str, DockerImageLayer]:
         return MappingProxyType(self._layers)
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         return MappingProxyType(self._config or {})
 
     @property
-    def manifest(self) -> Dict[str, Any]:
+    def manifest(self) -> Mapping[str, Any]:
         return MappingProxyType(self._manifest)
 
     @property
     def tags(self) -> Iterable[str]:
         return self._manifest.get("RepoTags", [])
 
-    def get(self, name: str) -> File:
+    def get(self, name: str) -> File | None:
         if name.startswith("/"):
             # remove root slash
             name = name[1:]
