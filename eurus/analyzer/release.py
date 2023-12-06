@@ -26,7 +26,7 @@ ETC_OS_RELEASE = "/etc/os-release"
 USR_LIB_OS_RELEASE = "/usr/lib/os-release"
 
 
-@dataclass
+@dataclass(frozen=True)
 class OSReleaseInfo:
     name: Optional[str]
     id: Optional[str]
