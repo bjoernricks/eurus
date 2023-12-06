@@ -18,7 +18,7 @@
 
 from dataclasses import dataclass
 from email.feedparser import BytesFeedParser
-from typing import Iterable, Optional
+from typing import Optional, Sequence
 
 from eurus.analyzer.detector import Detector
 from eurus.filesystem import File, FileSystem
@@ -42,7 +42,7 @@ class Dpkg(Detector):
         return file_system.get(DPKG_STATUS_FILE)
 
     @staticmethod
-    def get(file: File) -> Iterable[DEBPackage]:
+    def get(file: File) -> Sequence[DEBPackage]:
         # the dpkg package database uses the email format defined in RFC2822
         parser = BytesFeedParser()
         packages = []
