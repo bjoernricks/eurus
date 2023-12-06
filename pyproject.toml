@@ -16,6 +16,7 @@ aiomqtt = ">=1.2.1"
 autohooks = ">=22.8.1"
 autohooks-plugin-ruff = ">=23.11.0"
 autohooks-plugin-black = ">=22.8.1"
+autohooks-plugin-mypy = ">=23.10.0"
 pontos = ">=22.8.1"
 
 [build-system]
@@ -47,12 +48,22 @@ line_length = 80
 
 [tool.autohooks]
 mode = "poetry"
-pre-commit = ['autohooks.plugins.black', 'autohooks.plugins.ruff']
+pre-commit = [
+  'autohooks.plugins.black',
+  'autohooks.plugins.ruff',
+  'autohooks.plugins.mypy',
+]
 
 [tool.ruff]
 line-length = 80
 target-version = "py39"
 extend-select = ["I", "PLE", "PLW"]
+
+[tool.mypy]
+files = "eurus"
+ignore_missing_imports = true
+explicit_package_bases = true
+allow_redefinition = true
 
 [tool.pontos.version]
 version-module-file = "eurus/__version__.py"
