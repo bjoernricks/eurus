@@ -99,6 +99,7 @@ class MQTT(AsyncContextManager):
 
     async def start_scan(
         self,
+        host_name: str,
         os_release: OSReleaseInfo,
         packages: list[str],
     ) -> str:
@@ -106,7 +107,7 @@ class MQTT(AsyncContextManager):
         message = ScanStartMessage(
             scan_id=scan_id,
             host_ip="",
-            host_name="",
+            host_name=host_name,
             os_release=get_notus_operating_system(os_release),
             package_list=packages,
         )

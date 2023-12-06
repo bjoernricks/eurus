@@ -102,6 +102,7 @@ async def run(console: Console, error_console: Console) -> None:
 
         async with MQTT() as client:
             scan_id = await client.start_scan(
+                image_name,
                 os_release,
                 [str(package) for package in packages],
             )
